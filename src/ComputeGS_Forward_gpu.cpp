@@ -82,8 +82,33 @@ int ComputeGS_Forward_ref(const SparseMatrix_type & A, const Vector_type & r, Ve
   double time1 = x.time1;
   double time2 = x.time2;
 
+  #ifdef HPGMP_WITH_CUDA
+  // Copy local part of X to HOST CPU
+  if (cudaSuccess != cudaMemcpy(xv, x.d_values, nrow*sizeof(scalar_type), cudaMemcpyDeviceToHost)) {
+    printf( " Failed to memcpy d_y\n" );
+  }
+  #elif defined(HPGMP_WITH_HIP)
+  if (hipSuccess != hipMemcpy(xv, x.d_values, nrow*sizeof(scalar_type), hipMemcpyDeviceToHost)) {
+    printf( " Failed to memcpy d_y\n" );
+  }
+  #endif
+
   // Exchange Halo
   ExchangeHalo(A, x);
+
+  // copy non-local part of X to device (after Halo exchange)                                                        
+  #if defined(HPGMP_WITH_CUDA)
+  if (cudaSuccess != cudaMemcpy(d_xv + nrow, &xv[nrow], (ncol-nrow)*sizeof(scalar_type),                             
+                                cudaMemcpyHostToDevice)) {                                                           
+    printf( " Failed to memcpy d_x\n" );                                                                             
+  }
+  #elif defined(HPGMP_WITH_HIP)
+  if (hipSuccess != hipMemcpy(d_xv + nrow, &xv[nrow], (ncol-nrow)*sizeof(scalar_type),                               
+                              hipMemcpyHostToDevice)) {                                                              
+    printf( " Failed to memcpy d_x\n" );                                                                             
+  }
+  #endif 
+
   // restore timers (Exchange record comm in those)
   x.time1 = time1; x.time2 = time2;
 
